@@ -1,82 +1,57 @@
-#!/usr/bin/env node
-const converter = require('swagger2-to-postmanv2')
-const collection = require('./lib/collection')
-process.env.SUPPRESS_NO_CONFIG_WARNING = 'y';
-var configModule = require('config')
-config = configModule.util.loadFileConfigs(__dirname + '/config/')
-const fetch = require('./lib/fetch')
-const merger=require('./lib/merger')
+const config = require("./config");
+const axios = require("axios");
 
-const program = require('commander')
-program.version('1.0.0')
-    .option('-s --service <service>', 'which service to convert')
-    .option('-r --replace [repliaces]', 'comma split api name which will replace not merge')
-    .parse(process.argv)
+const options = {
+  headers: {
+    "X-API-Key": process.env.POSTMAN_API_KEY,
+  },
+};
 
+async function importOpenApi(url, { collections }, workspace) {
+  try {
+    const { data: schema } = await axios.get(url);
 
-var serviceConfig = config[program.service]
-var url = serviceConfig.url
-var collectionName = serviceConfig.collection_name
-
-//run update
-update().catch(err => {
-    console.error("run failed," + err)
-})
-
-//get swagger json
-function getSwaggerJson(url) {
-    return fetch({
-        url: url,
-        methods: 'get'
-    }).then(response => {
-        return response.data
-    })
-}
-
-
-
-async function update() {
-    var swaggerJson = await getSwaggerJson(url)
-    //add postman collection used info
-    swaggerJson['info'] = {
-        'title': collectionName,
-        'description': collectionName + ' api',
-        'version': '1.0.0',
-        '_postman_id': '807bb824-b333-4b59-a6ef-a8d46d3b95bf'
-    }
-    var converterInputData = {
-        'type': 'json',
-        'data': swaggerJson
+    for (const collection of collections) {
+      if (collection.name === schema.info.title) {
+        await axios.delete(
+          `https://api.getpostman.com/collections/${collection.id}?workspace=${workspace.id}`,
+          options
+        );
+      }
     }
 
-    //use postman tool convert to postman collection
-    converter.convert(converterInputData, { 'folderStrategy': 'Tags' }, async (_a, res) => {
-        if (res.result === false) {
-            console.log('convert failed')
-            console.log(res.reason)
-            return
-        }
-        var convertedJson = res.output[0].data
+    const { data: result } = await axios.post(
+      `https://api.getpostman.com/import/openapi?workspace=${workspace.id}`,
+      {
+        type: "json",
+        input: schema,
+      },
+      options
+    );
 
-        var id = await collection.getCollectionId(collectionName)
-        if (id === null) {
-            return
-        }
-        var collectionJson = {
-            'collection': {
-                'info': {
-                    'name': collectionName,
-                    'description': collectionName + ' api',
-                    '_postman_id': id,
-                    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-
-                },
-                "item": convertedJson.item
-            }
-        }
-    
-        var savedCollection = await collection.getCollectionDetail(id)   
-        var mergedCollection=merger.merge(savedCollection,collectionJson)    
-        collection.updateCollection(id, mergedCollection)
-    })
+    console.log(result);
+  } catch (error) {
+    console.log(error);
+  }
 }
+
+async function main() {
+  // Get workspace
+  const {
+    data: { workspaces },
+  } = await axios.get("https://api.getpostman.com/workspaces", options);
+
+  const workspace = workspaces.find((w) => w.name === "DMS");
+
+  // Get all current collection
+  const { data: collections } = await axios.get(
+    `https://api.getpostman.com/collections?workspace=${workspace.id}`,
+    options
+  );
+
+  for (const url of config.urls) {
+    importOpenApi(url, collections, workspace);
+  }
+}
+
+main();
