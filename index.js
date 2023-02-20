@@ -1,5 +1,9 @@
-const config = require("./config");
+#!/usr/bin/env node
+
 const axios = require("axios");
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
+require("colors");
 
 const options = {
   headers: {
@@ -29,6 +33,7 @@ async function importOpenApi(url, { collections }, workspace) {
       options
     );
 
+    console.log(`Import ${schema.info.title} success`.green);
     console.log(result);
   } catch (error) {
     console.log(error);
@@ -41,7 +46,9 @@ async function main() {
     data: { workspaces },
   } = await axios.get("https://api.getpostman.com/workspaces", options);
 
-  const workspace = workspaces.find((w) => w.name === "DMS");
+  const workspace = workspaces.find(
+    (w) => w.name === process.env.WORKSPACE_NAME
+  );
 
   // Get all current collection
   const { data: collections } = await axios.get(
@@ -49,7 +56,9 @@ async function main() {
     options
   );
 
-  for (const url of config.urls) {
+  const urls = process.env.API_URLS.split(",").map((s) => s.trim());
+
+  for (const url of urls) {
     importOpenApi(url, collections, workspace);
   }
 }
