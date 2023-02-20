@@ -10,7 +10,7 @@
 5. Add workspace name to .env file
 6. RUN `npm install`
 7. RUN `npm link`
-8. RUN `apiup` to update your collection
+8. RUN `apiup` **anywhere** to update your collection
 
 ## Caveat
 This script will delete any existing collection in the workspace and creating a new one. You may lost your existing collection configuration.
